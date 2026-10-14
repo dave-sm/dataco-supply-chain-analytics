@@ -1,0 +1,209 @@
+================================================================================
+DataCo Supply Chain Analytics - DAX Measures Reference
+================================================================================
+All measures are stored in the _Measures table unless otherwise noted.
+Grouped by analytical theme for discoverability.
+
+Format: measure name, formula, format string (if applied)
+
+================================================================================
+1. CORE KPI MEASURES
+================================================================================
+The base measures that most other calculations build on.
+
+--------------------------------------------------------------------------------
+Total_Sales
+--------------------------------------------------------------------------------
+SUM(FactOrders[sales_num])
+Format: 0.0
+
+--------------------------------------------------------------------------------
+Total_Profit(Reported)
+--------------------------------------------------------------------------------
+SUM(FactOrders[profit_num])
+Format: 0.0
+
+--------------------------------------------------------------------------------
+Total_Discount
+--------------------------------------------------------------------------------
+SUM(FactOrders[disc_num])
+
+--------------------------------------------------------------------------------
+Total_Orders
+--------------------------------------------------------------------------------
+DISTINCTCOUNT(FactOrders[order_id])
+Format: 0
+
+--------------------------------------------------------------------------------
+Avg_Order_value
+--------------------------------------------------------------------------------
+DIVIDE([Total_Sales], [Total_Orders])
+
+--------------------------------------------------------------------------------
+Profit_Margin(Reported)
+--------------------------------------------------------------------------------
+DIVIDE([Total_Profit(Reported)], [Total_Sales])
+Format: 0.0%;-0.0%
+
+================================================================================
+2. LATE DELIVERY MEASURES
+================================================================================
+The primary operational reliability metrics.
+
+--------------------------------------------------------------------------------
+Late_Deliveries
+--------------------------------------------------------------------------------
+SUM(FactOrders[late_delivery_risk])
+Format: 0
+
+--------------------------------------------------------------------------------
+Late_Delivery_Rate
+--------------------------------------------------------------------------------
+DIVIDE([Late_Deliveries], [Total_Orders])
+Format: 0.0%;-0.0%
+
+--------------------------------------------------------------------------------
+Avg_Risk_Score
+--------------------------------------------------------------------------------
+AVERAGE(FactOrders[late_risk_score])
+Format: 0.00
+(Predicted probability of lateness from the Notebook 5 LightGBM model.)
+
+================================================================================
+3. LEAD-TIME MEASURES
+================================================================================
+Delivery performance distribution metrics.
+
+--------------------------------------------------------------------------------
+Avg_Delivery_Days(Capped)
+--------------------------------------------------------------------------------
+AVERAGE(FactOrders[delivery_days_capped])
+Format: 0.0
+(Capped at 99.5th percentile for visual stability; see Notebook 6.)
+
+--------------------------------------------------------------------------------
+P90_Delivery_Days(Capped)
+--------------------------------------------------------------------------------
+PERCENTILEX.INC(FactOrders, FactOrders[delivery_days_capped], 0.9)
+(90th-percentile lead time - the "tail" the network can commit to with 90% confidence.)
+
+================================================================================
+4. FINANCIAL IMPACT MEASURES
+================================================================================
+Leakage decomposition, in the order they appear in the profit waterfall.
+
+--------------------------------------------------------------------------------
+Late_Penalty_Amount
+--------------------------------------------------------------------------------
+LatePenaltyRate[LatePenaltyRate Value] * [Total_Sales] * [Late_Delivery_Rate]
+(Depends on the LatePenaltyRate parameter table. Default is 0.03 - the base case
+from Notebook 4. The sensitivity analysis slider overrides this value.)
+
+--------------------------------------------------------------------------------
+Adjusted_Profit
+--------------------------------------------------------------------------------
+[Total_Profit(Reported)] - [Total_Discount] - [Late_Penalty_Amount]
+Format: 0.0
+(Net profit after discount and late-delivery leakage. The measure that turns
+the enterprise P&L negative under base-case assumptions.)
+
+--------------------------------------------------------------------------------
+Adj_Profit_Margin
+--------------------------------------------------------------------------------
+DIVIDE([Adjusted_Profit], [Total_Sales])
+Format: 0.0%;-0.0%
+
+================================================================================
+5. WATERFALL VISUAL SUPPORT
+================================================================================
+Drives the profit waterfall chart on the Financial Performance page.
+
+--------------------------------------------------------------------------------
+Waterfall_value
+--------------------------------------------------------------------------------
+VAR CurrentLabel =
+    SELECTEDVALUE(WaterfallTable[Label])
+RETURN
+    SWITCH(
+        CurrentLabel,
+        "Total Reported Profit ($)", [Total_Profit(Reported)],
+        "Total Discount ($)", -[Total_Discount],
+        "Late Penalty Amount ($)", -[Late_Penalty_Amount],
+        "Adjusted Profit ($)", BLANK(),
+        0
+    )
+Format: #,0.0
+(The Adjusted Profit row is deliberately BLANK() so the waterfall visual's
+"total" bar is computed automatically by Power BI, not double-counted.)
+
+--------------------------------------------------------------------------------
+LatePenaltyRate Value  (measure lives in the LatePenaltyRate table)
+--------------------------------------------------------------------------------
+SELECTEDVALUE('LatePenaltyRate'[LatePenaltyRate], 0)
+(Reads the current value of the what-if parameter slider. Series: 0.00 → 0.10
+step 0.01. Sensitises [Late_Penalty_Amount] and [Adjusted_Profit] to alternative
+penalty assumptions.)
+
+================================================================================
+6. FORECASTING MEASURES
+================================================================================
+Supports the Demand and Forecasting page.
+
+--------------------------------------------------------------------------------
+Forecast_Gap
+--------------------------------------------------------------------------------
+AVERAGE(FactWeeklyForecast[ML_Forecast]) - AVERAGE(FactWeeklyForecast[MA_Forecast])
+Format: #,0.00
+(Positive = ML forecast above MA baseline = expected demand surge.
+ Negative = ML forecast below MA baseline = expected contraction.)
+
+================================================================================
+7. CUSTOMER SEGMENTATION MEASURES
+================================================================================
+Supports the Customer Service Tiers page.
+
+--------------------------------------------------------------------------------
+Value_Share
+--------------------------------------------------------------------------------
+DIVIDE(
+    [Total_Sales],
+    CALCULATE([Total_Sales], ALL(CustomerSegments[service_tier]))
+)
+Format: 0.00%;-0.00%
+(Each service tier's share of total sales. Requires the bidirectional filter
+between FactOrders and CustomerSegments - see model_notes.md.)
+
+================================================================================
+Suggested Future Measures
+================================================================================
+These are not currently implemented but would extend the model.
+
+--------------------------------------------------------------------------------
+Late_Value_at_Risk
+--------------------------------------------------------------------------------
+CALCULATE(
+    [Total_Sales],
+    FactOrders[late_delivery_risk] = 1
+)
+(Total revenue associated with late-flagged orders. Mentioned in Notebook 2 as
+a headline metric ($15.9M) but not yet a measure in the model.)
+
+--------------------------------------------------------------------------------
+SLA_Gap_Days
+--------------------------------------------------------------------------------
+AVERAGE(FactOrders[delivery_days]) -
+    AVERAGE(DimShippingMode[ImpliedSLA_Days])
+(The average gap between actual delivery and the implied SLA promise for each
+mode. This is the metric that quantifies the "over-promise" problem directly.)
+
+--------------------------------------------------------------------------------
+Bottleneck_Priority_Score
+--------------------------------------------------------------------------------
+SUMX(
+    FactBottleneck,
+    FactBottleneck[bottleneck_score]
+)
+(Sum of the composite bottleneck scores for the current filter context. Useful
+for ranking corridor-mode segments on the Global Logistics page.)
+
+================================================================================

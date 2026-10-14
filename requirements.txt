@@ -1,0 +1,15 @@
+# requirements.txt — DataCo Late Delivery Risk Streamlit app
+# Pinned to versions tested on Kaggle (Python 3.12) and Streamlit Cloud
+
+sqlalchemy 
+pymysql 
+ipython-sql 
+jupyter 
+matplotlib
+streamlit==1.40.0
+pandas==2.2.2
+numpy==1.26.4
+scikit-learn==1.6.1
+lightgbm==4.6.0
+joblib==1.5.3
+pyarrow==22.0.0

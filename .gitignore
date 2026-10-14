@@ -1,0 +1,17 @@
+# Virtual Environment
+.venv/
+
+# Python cache and temporary files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+.DS_Store
+.streamlit/secrets.toml
+
+# Jupyter notebook checkpoints
+.ipynb_chechpoints/
+
+# Power BI interactive file
+power-bi/SmartSupplyChainSCOR.pbix
